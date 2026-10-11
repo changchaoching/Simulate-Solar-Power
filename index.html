@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SunPower: 太陽能產能競賽與學習曲線飛行模擬器 (Eclipsing the Competition)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #d97706;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col antialiased">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-xl shadow-md shadow-amber-500/20">
+                    ☀️
+                </div>
+                <div>
+                    <h1 class="text-base font-extrabold text-slate-900 leading-tight flex items-center gap-2">
+                        SunPower: Eclipsing the Competition
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">MIT Sloan 太陽能產能競賽</span>
+                    </h1>
+                    <p class="text-xs text-slate-500 hidden sm:block">學習曲線與光伏產業定價飛行模擬器 (John Sterman & Rebecca Henderson)</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button id="btnOpenSubmitModal" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-semibold rounded-lg shadow-sm shadow-emerald-600/20 flex items-center gap-1.5 transition">
+                    <i data-lucide="cloud-upload" class="w-4 h-4"></i>
+                    <span>登錄成績至試算表</span>
+                </button>
+                <button onclick="resetSimulation()" class="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition">
+                    重新開局
+                </button>
+                <button onclick="exportCSV()" class="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition">
+                    匯出報表
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 flex-1 w-full">
+
+        <!-- Banner: 模擬結束通知 (動態顯示) -->
+        <div id="gameStatusBanner" class="hidden"></div>
+
+        <!-- 頂部四大 KPI 指標卡片 -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <!-- 卡片 1: 模擬年度進度 -->
+            <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-1">
+                <span class="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">當前經營期數</span>
+                <div class="text-lg font-bold text-slate-900" id="valCurrentYear">第 1 年 / 共 15 年</div>
+                <span class="text-[10px] text-amber-600 font-medium">2006~2020 學習曲線週期</span>
+            </div>
+
+            <!-- 卡片 2: 累積營業利潤 -->
+            <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-1">
+                <span class="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">累積營業利潤</span>
+                <div class="text-lg font-bold text-emerald-600 font-mono" id="valCumulativeProfit">$5.8M</div>
+                <span class="text-[10px] text-slate-400 font-sans">EBITDA 累積總和</span>
+            </div>
+
+            <!-- 卡片 3: 全球排名 -->
+            <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-1">
+                <span class="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">全球利潤排名</span>
+                <div class="text-lg font-bold text-amber-600 font-mono" id="valPlayerRank">#1</div>
+                <span class="text-[10px] text-amber-700 font-medium">四巨頭利潤競賽</span>
+            </div>
+
+            <!-- 卡片 4: 單位成本與毛利率 -->
+            <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-1">
+                <span class="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">模組製造成本</span>
+                <div class="text-lg font-bold text-blue-600 font-mono" id="valUnitCost">$3.80 / W</div>
+                <span class="text-[10px] text-emerald-600 font-mono" id="valGrossMargin">21% 毛利率</span>
+            </div>
+
+            <!-- 卡片 5: 年產能規模 -->
+            <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-1">
+                <span class="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">年產能 (Capacity)</span>
+                <div class="text-lg font-bold text-purple-600 font-mono" id="valCapacity">65 MW</div>
+                <span class="text-[10px] text-purple-700">菲律賓晶圓模組廠</span>
+            </div>
+
+            <!-- 卡片 6: 市網平價狀態 -->
+            <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-1">
+                <span class="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">市網平價 (Grid Parity)</span>
+                <div class="text-xs font-bold text-cyan-700 font-mono" id="valGridParityStatus">差 $0.180/kWh</div>
+                <span class="text-[10px] text-slate-400">LCOE: <span id="valLCOE">$0.310</span>/kWh</span>
+            </div>
+        </div>
+
+        <!-- 兩欄格局：左側 CEO 策略控制台，右側市場四巨頭狀態與學習曲線分析 -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- 左側：決策控制台 (5 Cols) -->
+            <div class="lg:col-span-5 space-y-5">
+                <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-5">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <h2 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                            <i data-lucide="sliders" class="w-4 h-4 text-amber-600"></i>
+                            SunPower 執行長決策控制台
+                        </h2>
+                        <span class="text-xs text-slate-400 font-mono">CEO Tom Werner</span>
+                    </div>
+
+                    <!-- 快速策略範本 (Presets) -->
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-semibold text-slate-700">經典策略範本快速套用：</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button id="btnPresetAggressive" class="py-1.5 px-2 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-semibold rounded-lg border border-amber-200 transition">
+                                🚀 激進擴產衝經驗
+                            </button>
+                            <button id="btnPresetPremium" class="py-1.5 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-semibold rounded-lg border border-blue-200 transition">
+                                💎 高端高毛利研發
+                            </button>
+                            <button id="btnPresetBalanced" class="py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold rounded-lg border border-slate-200 transition">
+                                ⚖️ 穩健平價市佔
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 決策 1: 太陽能模組銷售價格 -->
+                    <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="font-bold text-slate-800">1. 太陽能模組定價 (Selling Price)</span>
+                            <div class="flex items-center gap-1 font-mono">
+                                <span>$</span>
+                                <input type="number" id="input-modulePrice" min="0.2" max="10.0" step="0.05" value="4.80" class="w-16 px-1.5 py-0.5 text-right font-bold text-amber-600 bg-white border border-slate-300 rounded text-xs focus:outline-none">
+                                <span class="text-slate-400">/W</span>
+                            </div>
+                        </div>
+                        <input type="range" id="slider-modulePrice" min="0.2" max="10.0" step="0.05" value="4.80" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex justify-between text-[10px] text-slate-400">
+                            <span>$0.20 (平價時代)</span>
+                            <span class="text-amber-700 font-semibold">當前定價</span>
+                            <span>$10.0 (早期高價)</span>
+                        </div>
+                    </div>
+
+                    <!-- 決策 2: 年產能擴充量 (Capacity Expansion) -->
+                    <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="font-bold text-slate-800">2. 本年度新增產能 (Capacity Expansion)</span>
+                            <div class="flex items-center gap-1 font-mono">
+                                <input type="number" id="input-expandCapacity" min="0" max="300" step="5" value="35" class="w-14 px-1.5 py-0.5 text-right font-bold text-purple-600 bg-white border border-slate-300 rounded text-xs focus:outline-none">
+                                <span class="text-slate-400">MW</span>
+                            </div>
+                        </div>
+                        <input type="range" id="slider-expandCapacity" min="0" max="300" step="5" value="35" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex justify-between text-[10px] text-slate-400">
+                            <span>0 MW (保守不擴充)</span>
+                            <span class="text-purple-600 font-semibold">+35 MW (歷史常態)</span>
+                            <span>300 MW (巨型擴產)</span>
+                        </div>
+                    </div>
+
+                    <!-- 決策 3: 製程改善與 R&D 預算佔比 -->
+                    <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="font-bold text-slate-800">3. 製程改善與研發預算 (Process Improvement R&D)</span>
+                            <div class="flex items-center gap-1 font-mono">
+                                <input type="number" id="input-rdBudget" min="1" max="35" step="1" value="12" class="w-12 px-1.5 py-0.5 text-right font-bold text-emerald-600 bg-white border border-slate-300 rounded text-xs focus:outline-none">
+                                <span class="text-slate-400">% 營收</span>
+                            </div>
+                        </div>
+                        <input type="range" id="slider-rdBudget" min="1" max="35" step="1" value="12" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex justify-between text-[10px] text-slate-400">
+                            <span>1% (放任自然學習)</span>
+                            <span class="text-emerald-700 font-semibold">12% 積極專利技術開發</span>
+                            <span>35% (極高投入)</span>
+                        </div>
+                    </div>
+
+                    <!-- 決策預覽面板 -->
+                    <div class="p-3 rounded-xl bg-slate-100 border border-slate-200 flex justify-between items-center text-xs font-mono">
+                        <div>次年總產能：<strong id="previewForecastCap" class="text-purple-600">100 MW</strong></div>
+                        <div>預估營收：<strong id="previewForecastRev" class="text-amber-600">$480.0M</strong></div>
+                        <div>製程 R&D 支出：<strong id="previewForecastRD" class="text-emerald-600">$57.6M</strong></div>
+                    </div>
+
+                    <!-- 下一步操作按鈕 -->
+                    <button id="btnNextYear" class="w-full py-3 bg-amber-600 hover:bg-amber-700 active:scale-[0.99] text-white font-bold text-sm rounded-xl shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition">
+                        <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        <span>投入擴產與製程改善，推進至第 2 年</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 右側：四巨頭市場地位卡片與戰略情報 (7 Cols) -->
+            <div class="lg:col-span-7 space-y-5">
+                <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <h2 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                            <i data-lucide="trophy" class="w-4 h-4 text-amber-500"></i>
+                            全球四大光伏龍頭即時競爭看板 (PV Industry Competitors)
+                        </h2>
+                        <span class="text-xs text-slate-400">依據累積營業利潤 (Cumulative Profit) 排序</span>
+                    </div>
+
+                    <!-- 四巨頭動態卡片 -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="competitorsGrid">
+                        <!-- 動態渲染卡片 -->
+                    </div>
+                </div>
+
+                <!-- 戰略背景小百科 (MIT Sloan Case 學習核心) -->
+                <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs space-y-2 text-slate-600">
+                    <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                        <i data-lucide="book-open" class="w-4 h-4 text-amber-600"></i>
+                        <span>MIT Sloan 學習曲線與光伏戰略洞察 (Professor Rebecca Henderson & John Sterman)</span>
+                    </div>
+                    <ul class="list-disc pl-4 space-y-1 text-[11px] leading-relaxed text-slate-600">
+                        <li><strong>Wright's Law 與 80% 進步比率 (Progress Ratio)：</strong> 光伏模組累積產量每翻倍，成本下降約 20%。但若定價過低導致現金流斷裂，將失去擴產融資能力。</li>
+                        <li><strong>高轉換效率 (21.5%) 的系統平衡成本 (BOS) 優勢：</strong> SunPower 的 Maxeon 背接觸技術可在相同屋頂面積多發 50% 電力，為客戶節省 25% 支架與安裝施工成本，享有終端溢價空間。</li>
+                        <li><strong>市網平價 (Grid Parity) 的 S 型爆發：</strong> 當太陽能度電成本 LCOE 降至市電價格以下時，補貼退出不再影響需求，全球市場將迎來幾何級數爆發！</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Dashboard (4 張高對比圖表) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Chart 1: 學習曲線對數圖 (Learning Curve: Cost vs Cumulative Volume) -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                        <i data-lucide="line-chart" class="w-4 h-4 text-amber-600"></i>
+                        太陽能學習曲線：單位成本 vs 累積產量 (Experience Curve)
+                    </h3>
+                    <span class="text-[10px] text-slate-400 font-mono">美元 / Watt ($/W)</span>
+                </div>
+                <div class="h-64">
+                    <canvas id="chartLearning"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 2: 模組售價 vs 單位成本利潤空間 (Price vs Cost Dynamics) -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                        <i data-lucide="dollar-sign" class="w-4 h-4 text-emerald-600"></i>
+                        SunPower 模組售價 vs 單位成本 (Gross Margin Spread)
+                    </h3>
+                    <span class="text-[10px] text-slate-400 font-mono">美元 / Watt ($/W)</span>
+                </div>
+                <div class="h-64">
+                    <canvas id="chartPriceCost"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 3: 四大廠商累積利潤走勢 (Cumulative Profits Competition) -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                        <i data-lucide="trending-up" class="w-4 h-4 text-purple-600"></i>
+                        全球光伏四巨頭累積營業利潤競賽 (Cumulative Profits)
+                    </h3>
+                    <span class="text-[10px] text-slate-400 font-mono">百萬美元 ($M)</span>
+                </div>
+                <div class="h-64">
+                    <canvas id="chartProfit"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 4: 市網平價走向 (LCOE vs Grid Power Price) -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                        <i data-lucide="zap" class="w-4 h-4 text-blue-600"></i>
+                        度電成本 (LCOE) vs 傳統市電價格：市網平價里程碑
+                    </h3>
+                    <span class="text-[10px] text-slate-400 font-mono">度電成本 ($/kWh)</span>
+                </div>
+                <div class="h-64">
+                    <canvas id="chartGridParity"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Historical Performance Table: 年度生態與經濟營運紀錄表 -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <i data-lucide="history" class="w-4 h-4 text-blue-600"></i>
+                    年度生態與經濟營運紀錄表 (Historical Annual Log)
+                </h3>
+                <span class="text-xs text-slate-400 font-mono" id="tableRecordCount">共 0 筆營運紀錄</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                            <th class="p-2.5">年度</th>
+                            <th class="p-2.5 text-right">模組售價</th>
+                            <th class="p-2.5 text-right">單位成本</th>
+                            <th class="p-2.5 text-right">毛利率</th>
+                            <th class="p-2.5 text-right">出貨量</th>
+                            <th class="p-2.5 text-right">全球市佔</th>
+                            <th class="p-2.5 text-right">營業收入</th>
+                            <th class="p-2.5 text-right">營業利益</th>
+                            <th class="p-2.5 text-right">累積利潤 (排名)</th>
+                            <th class="p-2.5 text-center">市網平價狀態</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody" class="divide-y divide-slate-100 text-slate-700 font-mono">
+                        <tr>
+                            <td colspan="10" class="p-4 text-center text-slate-400 font-sans italic">尚無營運數據，請點擊「投入擴產與製程改善」開始第一年競賽</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Google 試算表成績回傳 Modal 彈跳視窗 -->
+    <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-slate-200 animate-in fade-in duration-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">🎓</span>
+                    <div>
+                        <h3 class="text-base font-bold text-slate-900">回傳 SunPower 太陽能產能競賽成果</h3>
+                        <p class="text-xs text-slate-500">直連 Google 試算表（單一試算表・雙工作表架構）</p>
+                    </div>
+                </div>
+                <button onclick="closeSubmitModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+            </div>
+
+            <!-- 當前成績摘要預覽 -->
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-1.5 font-mono">
+                <div class="flex justify-between text-slate-600"><span>當前模擬進度：</span><strong id="modalSummaryYear" class="text-blue-600">第 1 年</strong></div>
+                <div class="flex justify-between text-slate-600"><span>累積營業利潤：</span><strong id="modalSummaryProfit" class="text-emerald-600 font-bold">$5.8M (全球 #1)</strong></div>
+                <div class="flex justify-between text-slate-600"><span>模組成本與售價：</span><strong id="modalSummaryUnitCost" class="text-amber-700 font-bold">$3.80/W ($4.80/W)</strong></div>
+                <div class="flex justify-between text-slate-600"><span>市網平價里程碑：</span><strong id="modalSummaryParity" class="text-cyan-700">尚未達成</strong></div>
+            </div>
+
+            <!-- 雙工作表說明提示 -->
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-[11px] text-amber-900 space-y-1">
+                <div class="font-bold flex items-center gap-1.5 text-amber-800">
+                    <span>📋</span> 系統將自動登錄至老師試算表之雙工作表：
+                </div>
+                <div class="text-[10px] text-amber-800 leading-normal pl-4">
+                    1. <strong>「總成績與排行榜」</strong>：登記您的最終名次、累積利潤、最終單位成本、最終年產能與【模擬結束通知訊息】<br>
+                    2. <strong>「年度生態與經濟營運紀錄表」</strong>：完整記錄您 15 年之模組定價、製造成本、毛利率、全球市佔、市電價格與四巨頭利潤走勢
+                </div>
+            </div>
+
+            <!-- 學生輸入表單 -->
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">班級代號 (Class)</label>
+                    <input type="text" id="inputClass" placeholder="例如：企管三甲、EMBA 永續科技管理" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">學號 (Student ID)</label>
+                        <input type="text" id="inputId" placeholder="例如：B110304001" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">姓名 (Student Name)</label>
+                        <input type="text" id="inputName" placeholder="例如：王小明" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <!-- Google Apps Script Webhook 網址設定 (可自由替換) -->
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block font-semibold text-slate-700">Google Apps Script Web App URL (Webhook)</label>
+                        <button onclick="toggleWebhookConfig()" class="text-[10px] text-amber-600 hover:underline">展開/自訂網址</button>
+                    </div>
+                    <input type="text" id="inputWebhookUrl" placeholder="https://script.google.com/macros/s/AKfycb.../exec" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-[11px] font-mono text-slate-600 bg-slate-50 focus:bg-white focus:outline-none">
+                    <p class="text-[10px] text-slate-400 mt-0.5">預設已自動儲存於瀏覽器 LocalStorage，學生輸入一次後免再重複貼上。</p>
+                </div>
+            </div>
+
+            <!-- 操作與提示訊息 -->
+            <div class="pt-2 space-y-2">
+                <button id="btnSubmitScore" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2 transition">
+                    <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                    確認回傳總成績與營運紀錄表至 Google 試算表
+                </button>
+                <div id="submitResultMsg" class="text-xs text-center font-medium min-h-[1.25rem]"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-200 bg-white py-4 px-4 sm:px-6 text-center text-xs text-slate-500">
+        <p>SunPower: Focused on the Future of Solar Power・MIT Sloan 經典管理飛行模擬器・純前端 GitHub Pages + Google 雙工作表架構</p>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="engine.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
